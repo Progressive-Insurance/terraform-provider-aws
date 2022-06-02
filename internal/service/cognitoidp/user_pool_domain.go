@@ -20,6 +20,7 @@ func ResourceUserPoolDomain() *schema.Resource {
 	return &schema.Resource{
 		Create: resourceUserPoolDomainCreate,
 		Read:   resourceUserPoolDomainRead,
+		Update: resourceUserPoolDomainUpdate,
 		Delete: resourceUserPoolDomainDelete,
 		Importer: &schema.ResourceImporter{
 			State: schema.ImportStatePassthrough,
@@ -32,10 +33,11 @@ func ResourceUserPoolDomain() *schema.Resource {
 				ForceNew:     true,
 				ValidateFunc: validation.StringLenBetween(1, 63),
 			},
+			// Should allow changes, but on delete should force new resource
+			// Do I need to do the full CustomizeDiff field?
 			"certificate_arn": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ForceNew:     true,
 				ValidateFunc: verify.ValidARN,
 			},
 			"user_pool_id": {
@@ -140,6 +142,42 @@ func resourceUserPoolDomainRead(d *schema.ResourceData, meta interface{}) error 
 	d.Set("version", desc.Version)
 
 	return nil
+}
+
+func resourceUserPoolDomainUpdate(d *schema.ResourceData, meta interface{}) error {
+	conn := meta.(*conns.AWSClient).CognitoIDPConn
+
+	domain := d.Get("domain").(string)
+	timeout := 60 * time.Minute // Update is only for cert arns on custom domains, which take more time to become active
+
+	params := &cognitoidentityprovider.UpdateUserPoolDomainInput{
+		Domain:     aws.String(domain),
+		UserPoolId: aws.String(d.Get("user_pool_id").(string)),
+	}
+
+	if v, ok := d.GetOk("certificate_arn"); ok {
+		customDomainConfig := &cognitoidentityprovider.CustomDomainConfigType{
+			CertificateArn: aws.String(v.(string)),
+		}
+		params.CustomDomainConfig = customDomainConfig
+	} else {
+		// Throw error, can't delete cert, can only update
+		// This should be unreachable? Thoughts?
+		// return fmt.Errorf("Error updating User Pool Domain: %w", err)
+	}
+
+	log.Printf("[DEBUG] Updating Cognito User Pool Domain: %s", params)
+
+	_, err := conn.UpdateUserPoolDomain(params)
+	if err != nil {
+		return fmt.Errorf("Error updating User Pool Domain: %w", err)
+	}
+
+	if _, err := waitUserPoolDomainUpdated(conn, d.Id(), timeout); err != nil {
+		return fmt.Errorf("error waiting for User Pool Domain (%s) update: %w", d.Id(), err)
+	}
+
+	return resourceUserPoolDomainRead(d, meta)
 }
 
 func resourceUserPoolDomainDelete(d *schema.ResourceData, meta interface{}) error {
