@@ -63,8 +63,8 @@ func ResourceUserPoolDomain() *schema.Resource {
 			},
 		},
 		CustomizeDiff: customdiff.ForceNewIfChange("certificate_arn", func(_ context.Context, old, new, meta interface{}) bool {
-			// If custom domain was set with certificate arn, cannot remove without re-creation
-			return old.(string) != "" && new.(string) == ""
+			// If the cert arn is being changed to a new arn, don't force new
+			return !(old.(string) != "" && new.(string) != "")
 		}),
 	}
 }
@@ -164,9 +164,6 @@ func resourceUserPoolDomainUpdate(d *schema.ResourceData, meta interface{}) erro
 			CertificateArn: aws.String(v.(string)),
 		}
 		params.CustomDomainConfig = customDomainConfig
-	} else {
-		// This should be unreachable, remove?
-		return fmt.Errorf("Error updating User Pool Domain: Only 'certificate_arn' is eligible for update")
 	}
 
 	log.Printf("[DEBUG] Updating Cognito User Pool Domain: %s", params)
