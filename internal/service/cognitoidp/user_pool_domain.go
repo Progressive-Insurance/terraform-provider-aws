@@ -1,6 +1,7 @@
 package cognitoidp
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/cognitoidentityprovider"
 	"github.com/hashicorp/aws-sdk-go-base/v2/awsv1shim/v2/tfawserr"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/customdiff"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	"github.com/hashicorp/terraform-provider-aws/internal/conns"
@@ -33,8 +35,6 @@ func ResourceUserPoolDomain() *schema.Resource {
 				ForceNew:     true,
 				ValidateFunc: validation.StringLenBetween(1, 63),
 			},
-			// Should allow changes, but on delete should force new resource
-			// Do I need to do the full CustomizeDiff field?
 			"certificate_arn": {
 				Type:         schema.TypeString,
 				Optional:     true,
@@ -62,6 +62,10 @@ func ResourceUserPoolDomain() *schema.Resource {
 				Computed: true,
 			},
 		},
+		CustomizeDiff: customdiff.ForceNewIfChange("certificate_arn", func(_ context.Context, old, new, meta interface{}) bool {
+			// If custom domain was set with certificate arn, cannot remove without re-creation
+			return old.(string) != "" && new.(string) == ""
+		}),
 	}
 }
 
@@ -161,9 +165,8 @@ func resourceUserPoolDomainUpdate(d *schema.ResourceData, meta interface{}) erro
 		}
 		params.CustomDomainConfig = customDomainConfig
 	} else {
-		// Throw error, can't delete cert, can only update
-		// This should be unreachable? Thoughts?
-		// return fmt.Errorf("Error updating User Pool Domain: %w", err)
+		// This should be unreachable, remove?
+		return fmt.Errorf("Error updating User Pool Domain: Only 'certificate_arn' is eligible for update")
 	}
 
 	log.Printf("[DEBUG] Updating Cognito User Pool Domain: %s", params)
