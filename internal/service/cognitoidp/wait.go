@@ -48,6 +48,10 @@ func waitUserPoolDomainCreated(conn *cognitoidentityprovider.CognitoIdentityProv
 
 	outputRaw, err := stateConf.WaitForState()
 
+	if err != nil {
+		return nil, err
+	}
+
 	if output, ok := outputRaw.(*cognitoidentityprovider.DescribeUserPoolDomainOutput); ok {
 		return output, err
 	}
