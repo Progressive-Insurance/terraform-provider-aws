@@ -170,7 +170,7 @@ func resourceUserPoolDomainUpdate(d *schema.ResourceData, meta interface{}) erro
 
 	_, err := conn.UpdateUserPoolDomain(params)
 	if err != nil {
-		return fmt.Errorf("Error updating User Pool Domain (%s): %w", d.Id(), err)
+		return fmt.Errorf("error updating User Pool Domain (%s): %w", d.Id(), err)
 	}
 
 	if _, err := waitUserPoolDomainUpdated(conn, d.Id(), timeout); err != nil {
